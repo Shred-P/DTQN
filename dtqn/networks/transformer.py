@@ -89,7 +89,7 @@ class TransformerIdentityLayer(TransformerLayer):
             x_norm1,
             x_norm1,
             x_norm1,
-            attn_mask=self.attn_mask[: x_norm1.size(1), : x_norm1.size(1)],
+            attn_mask=self.attn_xmask[: x_norm1.size(1), : x_norm1.size(1)],
             average_attn_weights=True,  # Only affects self.alpha for visualizations
         )
         # Skip connection

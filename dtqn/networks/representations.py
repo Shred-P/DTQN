@@ -150,6 +150,7 @@ class ActionEmbeddingRepresentation(nn.Module):
             nn.Embedding(num_actions, action_dim),
             nn.Flatten(start_dim=-2),
         )
+        print('a embed -called')
 
     def forward(self, action: torch.Tensor):
         return self.embedding(action)

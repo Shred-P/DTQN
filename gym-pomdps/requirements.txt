@@ -1,0 +1,4 @@
+gym>=0.14.0
+one_to_one@git+ssh://git@github.com/abaisero/one-to-one.git@master#egg=one_to_one
+numpy>=1.17
+rl_parsers@git+ssh://git@github.com/abaisero/rl-parsers.git@master#egg=rl_parsers

@@ -208,7 +208,7 @@ class DtqnAgent(DqnAgent):
         # Rewards: [batch-size x hist-len x 1]
         rewards = torch.as_tensor(rewards, dtype=torch.float32, device=self.device)
         # Dones: [batch-size x hist-len x 1]
-        dones = torch.as_tensor(dones, dtype=torch.long, device=self.device)
+        dones = torch.as_tensor(dones, dtype=torch.float32, device=self.device)
 
         # obss is [batch-size x hist-len x obs-len]
         # then q_values is [batch-size x hist-len x n-actions]

@@ -1,4 +1,4 @@
-import gym
+import gymnasium as gym
 from gym import spaces
 from gym.wrappers.time_limit import TimeLimit
 import numpy as np
@@ -25,19 +25,19 @@ from enum import Enum
 from typing import Tuple
 
 from utils.random import RNG
-
+import mobile_env
 
 def make_env(id_or_path: str) -> GymEnvironment:
     """Makes a GV gym environment."""
     try:
         print("Loading using gym.make")
         env = gym.make(id_or_path)
-
     except gym.error.Error:
         print(f"Environment with id {id_or_path} not found.")
-        print("Loading using YAML")
+        env_full_path = os.path.join(os.getcwd(), "envs", "gridverse", id_or_path)
+        print(f"Loading using YAML:{env_full_path}")
         inner_env = factory_env_from_yaml(
-            os.path.join(os.getcwd(), "envs", "gridverse", id_or_path)
+            env_full_path
         )
         state_representation = make_state_representation(
             "default", inner_env.state_space
@@ -52,7 +52,6 @@ def make_env(id_or_path: str) -> GymEnvironment:
         )
         env = GymEnvironment(outer_env)
         env = TimeLimit(GridVerseWrapper(env), max_episode_steps=250)
-
     return env
 
 
@@ -67,14 +66,14 @@ def get_env_obs_type(env: gym.Env) -> int:
     sample_obs = env.reset()
     # Check for image first
     if (
-        (isinstance(sample_obs, np.ndarray) and len(sample_obs.shape) == 3)
-        and isinstance(obs_space, spaces.Box)
-        and np.all(obs_space.low == 0)
-        and np.all(obs_space.high == 255)
+            (isinstance(sample_obs, np.ndarray) and len(sample_obs.shape) == 3)
+            and isinstance(obs_space, spaces.Box)
+            and np.all(obs_space.low == 0)
+            and np.all(obs_space.high == 255)
     ):
         return ObsType.IMAGE
     elif isinstance(
-        obs_space, (spaces.Discrete, spaces.MultiDiscrete, spaces.MultiBinary)
+            obs_space, (spaces.Discrete, spaces.MultiDiscrete, spaces.MultiBinary)
     ):
         return ObsType.DISCRETE
     else:
@@ -129,3 +128,63 @@ def get_env_max_steps(env: gym.Env) -> Union[int, None]:
             return env.max_episode_steps
         except AttributeError:
             return None
+
+
+def encode_action(action, num_actions_per_dim):
+    """
+    将多维动作数组编码成一个值。
+
+    参数:
+    - action: 包含每个维度动作的数组，比如 [1, 2, 3, 1, 0]
+    - num_actions_per_dim: 每个维度的动作数量，比如 [4, 4, 4, 4, 4]
+
+    返回:
+    - 一个整数，表示编码后的动作值
+    """
+    # 检查输入的有效性
+    assert len(action) == len(num_actions_per_dim), "动作数组和动作维度数组长度不匹配"
+
+    # 初始化编码值
+    encoded_value = 0
+    base = 1
+
+    # 将动作编码为一个值
+    for a, n in zip(reversed(action), reversed(num_actions_per_dim)):
+        encoded_value += a * base
+        base *= n
+
+    return encoded_value
+
+
+def decode_action(encoded_value, num_actions_per_dim):
+    """
+    将编码后的整数解码为多维动作数组。
+
+    参数:
+    - encoded_value: 一个编码后的整数值
+    - num_actions_per_dim: 每个维度的动作数量，比如 [4, 4, 4, 4, 4]
+
+    返回:
+    - 多维动作数组，比如 [1, 2, 3, 1, 0]
+    """
+    action = []
+
+    for n in reversed(num_actions_per_dim):
+        action.append(encoded_value % n)
+        encoded_value //= n
+
+    # 返回的顺序需要反转以符合原来的顺序
+    return list(reversed(action))
+
+
+def total_dimensions(num_actions_per_dim):
+    """
+    计算多维动作空间编码成整数后的总维度。
+
+    参数:
+    - num_actions_per_dim: 每个维度的动作数量，比如 [4, 4, 4, 4, 4]
+
+    返回:
+    - 编码成整数后的总维度
+    """
+    return np.prod(num_actions_per_dim)

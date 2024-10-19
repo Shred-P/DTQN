@@ -5,8 +5,9 @@ from typing import Optional, Tuple
 
 import torch
 import wandb
+import gymnasium as gym
 from gym import Env
-
+import numpy as np
 from utils import env_processing, epsilon_anneal
 from utils.agent_utils import MODEL_MAP, get_agent
 from utils.random import set_global_seed, RNG
@@ -61,12 +62,16 @@ def get_args():
     parser.add_argument(
         "--lr", type=float, default=3e-4, help="Learning rate for the optimizer."
     )
-    parser.add_argument("--batch", type=int, default=32, help="Batch size.")
+    parser.add_argument(
+        "--batch", type=int, default=32, help="Batch size."
+    )
     parser.add_argument(
         "--buf-size",
         type=int,
         default=500_000,
-        help="Number of timesteps to store in replay buffer. Note that we store the max length episodes given by the environment, so episodes that take longer will be padded at the end. This does not affect training but may affect the number of real observations in the buffer.",
+        help="Number of timesteps to store in replay buffer. Note that we store the max length episodes given by the "
+             "environment, so episodes that take longer will be padded at the end. This does not affect training but "
+             "may affect the number of real observations in the buffer.",
     )
     parser.add_argument(
         "--eval-frequency",
@@ -81,7 +86,8 @@ def get_args():
         help="Number of episodes for each evaluation period.",
     )
     parser.add_argument(
-        "--device", type=str, default="cuda", help="Pytorch device to use."
+        "--device", type=str, default="mps", help="Pytorch device to use."
+        # 修改为mps
     )
     parser.add_argument(
         "--context",
@@ -99,7 +105,8 @@ def get_args():
         "--a-embed",
         type=int,
         default=0,
-        help="The number of features to give each action. A value of 0 will prevent the policy from using the previous action.",
+        help="The number of features to give each action. A value of 0 will prevent the policy from using the "
+             "previous action.",
     )
     parser.add_argument(
         "--in-embed",
@@ -111,9 +118,12 @@ def get_args():
         "--max-episode-steps",
         type=int,
         default=-1,
-        help="The maximum number of steps allowed in the environment. If `env` has a `max_episode_steps`, this will be inferred. Otherwise, this argument must be supplied.",
+        help="The maximum number of steps allowed in the environment. If `env` has a `max_episode_steps`, this will "
+             "be inferred. Otherwise, this argument must be supplied.",
     )
-    parser.add_argument("--seed", type=int, default=1, help="The random seed to use.")
+    parser.add_argument(
+        "--seed", type=int, default=1, help="The random seed to use."
+    )
     parser.add_argument(
         "--save-policy",
         action="store_true",
@@ -133,7 +143,9 @@ def get_args():
         "--history",
         type=int,
         default=50,
-        help="This is how many (intermediate) Q-values we use to train for each context. To turn off intermediate Q-value prediction, set `--history 1`. To use the entire context, set history equal to the context length.",
+        help="This is how many (intermediate) Q-values we use to train for each context. To turn off intermediate "
+             "Q-value prediction, set `--history 1`. To use the entire context, set history equal to the context "
+             "length.",
     )
     # DTQN-Specific
     parser.add_argument(
@@ -149,9 +161,16 @@ def get_args():
         help="Number of transformer blocks to use for the transformer.",
     )
     parser.add_argument(
+        "--prepopulate",
+        type=int,
+        default=50_000,
+    )
+    parser.add_argument(
         "--dropout", type=float, default=0.0, help="Dropout probability."
     )
-    parser.add_argument("--discount", type=float, default=0.99, help="Discount factor.")
+    parser.add_argument(
+        "--discount", type=float, default=0.99, help="Discount factor."
+    )
     parser.add_argument(
         "--gate",
         type=str,
@@ -185,10 +204,11 @@ def get_args():
 
 
 def evaluate(
-    agent,
-    eval_env: Env,
-    eval_episodes: int,
-    render: Optional[bool] = None,
+        agent,
+        eval_env: Env,
+        eval_episodes: int,
+        args,
+        render: Optional[bool] = None,
 ):
     """Evaluate the network for n_episodes using a greedy policy.
 
@@ -211,7 +231,7 @@ def evaluate(
     total_steps = 0
 
     for _ in range(eval_episodes):
-        agent.context_reset(eval_env.reset())
+        agent.context_reset(eval_env.reset(seed=args.seed)[0])
         done = False
         ep_reward = 0
         if render:
@@ -219,7 +239,9 @@ def evaluate(
             sleep(0.5)
         while not done:
             action = agent.get_action(epsilon=0.0)
-            obs_next, reward, done, info = eval_env.step(action)
+            decoded_action = env_processing.decode_action(action, eval_env.action_space.nvec)
+            obs_next, reward, terminated, truncated, info = eval_env.step(decoded_action)
+            done = terminated or truncated
             agent.observe(obs_next, action, reward, done)
             ep_reward += reward
             if render:
@@ -244,22 +266,23 @@ def evaluate(
 
 
 def train(
-    agent,
-    envs: Tuple[Env],
-    eval_envs: Tuple[Env],
-    env_strs: Tuple[str],
-    total_steps: int,
-    eps: epsilon_anneal.EpsilonAnneal,
-    eval_frequency: int,
-    eval_episodes: int,
-    policy_path: str,
-    save_policy: bool,
-    logger,
-    mean_success_rate: RunningAverage,
-    mean_episode_length: RunningAverage,
-    mean_reward: RunningAverage,
-    time_remaining: Optional[int],
-    verbose: bool = False,
+        agent,
+        envs: Tuple[Env],
+        eval_envs: Tuple[Env],
+        env_strs: Tuple[str],
+        total_steps: int,
+        eps: epsilon_anneal.EpsilonAnneal,
+        eval_frequency: int,
+        eval_episodes: int,
+        policy_path: str,
+        save_policy: bool,
+        logger,
+        mean_success_rate: RunningAverage,
+        mean_episode_length: RunningAverage,
+        mean_reward: RunningAverage,
+        time_remaining: Optional[int],
+        verbose: bool = False,
+        args=None,
 ) -> None:
     """Train the agent.
 
@@ -285,7 +308,7 @@ def train(
     agent.eval_off()
     # Choose an environment at the start and on every episode reset.
     env = RNG.rng.choice(envs)
-    agent.context_reset(env.reset())
+    agent.context_reset(env.reset(seed=args.seed)[0])
 
     for timestep in range(agent.num_train_steps, total_steps):
         done = step(agent, env, eps)
@@ -293,7 +316,7 @@ def train(
         if done:
             agent.replay_buffer.flush()
             env = RNG.rng.choice(envs)
-            agent.context_reset(env.reset())
+            agent.context_reset(env.reset(seed=args.seed)[0])
         agent.train()
         eps.anneal()
 
@@ -313,7 +336,7 @@ def train(
             }
             # Perform an evaluation for each of the eval environments and add to our log
             for env_str, eval_env in zip(env_strs, eval_envs):
-                sr, ret, length = evaluate(agent, eval_env, eval_episodes)
+                sr, ret, length = evaluate(agent, eval_env, eval_episodes, args=args)
 
                 log_vals.update(
                     {
@@ -336,12 +359,6 @@ def train(
 
         if save_policy and timestep % 50_000 == 0:
             torch.save(agent.policy_network.state_dict(), policy_path)
-
-        if time_remaining and time() - start_time >= time_remaining:
-            print(
-                f"Reached time limit. Saving checkpoint with {agent.num_train_steps} steps completed."
-            )
-
             agent.save_checkpoint(
                 policy_path,
                 wandb.run.id if logger == wandb else None,
@@ -350,6 +367,19 @@ def train(
                 mean_episode_length,
                 eps,
             )
+        if time_remaining and time() - start_time >= time_remaining:
+            print(
+                f"Reached time limit. Saving checkpoint with {agent.num_train_steps} steps completed."
+            )
+
+            # agent.save_checkpoint(
+            #     policy_path,
+            #     wandb.run.id if logger == wandb else None,
+            #     mean_success_rate,
+            #     mean_reward,
+            #     mean_episode_length,
+            #     eps,
+            # )
             return
 
 
@@ -365,14 +395,15 @@ def step(agent, env: Env, eps: float) -> bool:
         done: bool, whether or not the episode has finished.
     """
     action = agent.get_action(epsilon=eps.val)
-    next_obs, reward, done, info = env.step(action)
+    decode_action = env_processing.decode_action(action, env.action_space.nvec)
+    next_obs, reward, terminated, truncated, info = env.step(decode_action)
 
-    # OpenAI Gym TimeLimit truncation: don't store it in the buffer as done
-    if info.get("TimeLimit.truncated", False):
+    if truncated:
         buffer_done = False
     else:
-        buffer_done = done
+        buffer_done = terminated
 
+    done = terminated or truncated
     agent.observe(next_obs, action, reward, buffer_done)
     return done
 
@@ -388,17 +419,20 @@ def prepopulate(agent, prepop_steps: int, envs: Tuple[Env]) -> None:
     timestep = 0
     while timestep < prepop_steps:
         env = RNG.rng.choice(envs)
-        agent.context_reset(env.reset())
+        agent.context_reset(env.reset()[0])
         done = False
         while not done:
-            action = RNG.rng.integers(env.action_space.n)
-            next_obs, reward, done, info = env.step(action)
+            num_actions = env_processing.total_dimensions(env.action_space.nvec )
+            action = RNG.rng.integers(num_actions)
+            decode_action = env_processing.decode_action(action,env.action_space.nvec )
+            next_obs, reward, terminated, truncated, info = env.step(decode_action)
 
-            # OpenAI Gym TimeLimit truncation: don't store it in the buffer as done
-            if info.get("TimeLimit.truncated", False):
+            if truncated:
                 buffer_done = False
             else:
-                buffer_done = done
+                buffer_done = terminated
+
+            done = terminated or truncated
 
             agent.observe(next_obs, action, reward, buffer_done)
             timestep += 1
@@ -412,11 +446,13 @@ def run_experiment(args):
     envs = []
     eval_envs = []
     for env_str in args.envs:
+        print(f'test:{env_str}')
         envs.append(env_processing.make_env(env_str))
         eval_envs.append(env_processing.make_env(env_str))
     device = torch.device(args.device)
     set_global_seed(args.seed, *(envs + eval_envs))
 
+    """退火"""
     eps = epsilon_anneal.LinearAnneal(1.0, 0.1, args.num_steps // 10)
 
     agent = get_agent(
@@ -445,7 +481,7 @@ def run_experiment(args):
     )
 
     print(
-        f"[ {timestamp()} ] Creating {args.model} with {sum(p.numel() for p in agent.policy_network.parameters())} parameters"
+        f"[ {timestamp()} ] Creating {args.model} with {sum(p.numel() for p in agent.policy_network.parameters())} parameters "
     )
 
     # Create logging dir
@@ -462,9 +498,16 @@ def run_experiment(args):
     # Enjoy mode
     if args.render:
         agent.policy_network.load_state_dict(
-            torch.load(policy_path, map_location="cpu")
+            torch.load(policy_path, map_location="mps")
         )
-        evaluate(agent, eval_envs[0], 1_000_000, render=True)
+        """
+         agent.policy_network.load_state_dict(
+         torch.load(policy_path, map_location="mps"), strict=False
+         )
+         训练模型大小不一致，可以考虑使用 strict = False
+        """
+
+        evaluate(agent, eval_envs[0], 1_000_000, args=args, render=True)
 
     # If there is already a saved checkpoint, load it and resume training if more steps are needed
     # Or exit early if we have already finished training.
@@ -492,7 +535,7 @@ def run_experiment(args):
     else:
         wandb_kwargs = {"resume": None}
         # Prepopulate the replay buffer
-        prepopulate(agent, 50_000, envs)
+        prepopulate(agent, args.prepopulate, envs)
         mean_success_rate = RunningAverage(10)
         mean_reward = RunningAverage(10)
         mean_episode_length = RunningAverage(10)
@@ -521,6 +564,7 @@ def run_experiment(args):
         mean_episode_length,
         time_remaining,
         args.verbose,
+        args=args
     )
 
     # Save a small checkpoint if we finish training to let following runs know we are finished

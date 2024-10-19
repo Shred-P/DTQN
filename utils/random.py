@@ -24,8 +24,11 @@ def set_global_seed(seed: int, *args: Tuple[gym.Env]) -> None:
     torch.manual_seed(tseed)
     np.random.seed(npseed)
     for env in args:
-        env.seed(seed=seed)
-        env.observation_space.seed(seed=seed)
-        env.action_space.seed(seed=seed)
+        try:
+            env.seed(seed=seed)
+            env.observation_space.seed(seed=seed)
+            env.action_space.seed(seed=seed)
+        except AttributeError as e:
+            print("seed 函数在gymnaisum被移除")
     os.environ["PYTHONHASHSEED"] = str(ospyseed)
     RNG.rng = np.random.Generator(np.random.PCG64(seed=seed))

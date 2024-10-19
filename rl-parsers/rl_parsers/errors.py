@@ -1,0 +1,2 @@
+class SemanticError(RuntimeError):
+    pass

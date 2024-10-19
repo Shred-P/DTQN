@@ -1,5 +1,5 @@
 from typing import Tuple
-import gym
+import gymnasium as gym
 import torch
 import numpy as np
 
@@ -12,6 +12,7 @@ from dtqn.networks.darqn import DARQN
 from dtqn.networks.dqn import DQN
 from dtqn.networks.dtqn import DTQN
 from utils import env_processing
+
 
 
 MODEL_MAP = {
@@ -97,14 +98,23 @@ def get_agent(
         envs[0].observation_space,
         (gym.spaces.Discrete, gym.spaces.MultiDiscrete, gym.spaces.MultiBinary),
     )
+    # todo 修改判断是否是离散环境
+    # is_discrete_env = True
     # Keep the history between 1 and context length
     if history < 1 or history > context_len:
         print(
             f"History must be 1 < history <= context_len, but history is {history} and context len is {context_len}. Clipping history to {np.clip(history, 1, context_len)}..."
         )
         history = np.clip(history, 1, context_len)
+    num_action = None
     # All envs must share same action space
-    num_actions = envs[0].action_space.n
+    if isinstance(envs[0].action_space, gym.spaces.MultiDiscrete):
+        num_actions_per_dim = envs[0].action_space.nvec
+        num_action = env_processing.total_dimensions(num_actions_per_dim)
+    else:
+        num_actions_per_dim = [envs[0].action_space.n]
+        num_action = num_actions_per_dim
+
 
     if model_str == "DQN":
         context_len = 1
@@ -113,7 +123,7 @@ def get_agent(
         """Creates the non-transformer models: DQN, DRQN, ADRQN, ..."""
         return lambda: network_cls(
             env_obs_length,
-            num_actions,
+            num_action,
             embed_per_obs_dim,
             action_dim,
             inner_embed,
@@ -126,7 +136,7 @@ def get_agent(
         """Creates DTQN"""
         return lambda: network_cls(
             env_obs_length,
-            num_actions,
+            num_action,
             embed_per_obs_dim,
             action_dim,
             inner_embed,
@@ -155,7 +165,7 @@ def get_agent(
         env_obs_length,
         max_env_steps,
         env_obs_mask,
-        num_actions,
+        num_action,
         is_discrete_env,
         learning_rate=learning_rate,
         batch_size=batch_size,
