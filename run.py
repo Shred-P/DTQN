@@ -489,10 +489,12 @@ def run_experiment(args):
         os.getcwd(), "policies", args.project_name, *args.envs
     )
     os.makedirs(policy_save_dir, exist_ok=True)
+    from datetime import datetime
+    current_time = datetime.now().strftime('%Y-%m-%d_%H-%M')
     policy_path = os.path.join(
         policy_save_dir,
         f"model={args.model}_envs={','.join(args.envs)}_obs_embed={args.obs_embed}_a_embed={args.a_embed}_in_embed={args.in_embed}_context={args.context}_heads={args.heads}_layers={args.layers}_"
-        f"batch={args.batch}_gate={args.gate}_identity={args.identity}_history={args.history}_pos={args.pos}_bag={args.bag_size}_seed={args.seed}",
+        f"batch={args.batch}_gate={args.gate}_identity={args.identity}_history={args.history}_pos={args.pos}_bag={args.bag_size}_seed={args.seed}_discount{args.discount}_time={current_time}",
     )
 
     # Enjoy mode
