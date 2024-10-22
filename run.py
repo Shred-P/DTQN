@@ -6,7 +6,7 @@ from typing import Optional, Tuple
 import torch
 import wandb
 import gymnasium as gym
-from gym import Env
+from gymnasium import Env
 import numpy as np
 from utils import env_processing, epsilon_anneal
 from utils.agent_utils import MODEL_MAP, get_agent
@@ -130,6 +130,10 @@ def get_args():
         help="Use this to save the policy so you can load it later for rendering.",
     )
     parser.add_argument(
+        "--policy-path",
+        type=str,
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Print out evaluation results as they come in to the console.",
@@ -227,29 +231,40 @@ def evaluate(
     agent.eval_on()
 
     total_reward = 0
+    total_old_reward = 0
     num_successes = 0
     total_steps = 0
+    # for _ in range (5):
+    #     eval_env.reset(seed=args.seed)[0]
 
     for _ in range(eval_episodes):
         agent.context_reset(eval_env.reset(seed=args.seed)[0])
         done = False
         ep_reward = 0
+        old_ep_reward = 0
         if render:
             eval_env.render()
             sleep(0.5)
         while not done:
             action = agent.get_action(epsilon=0.0)
             decoded_action = env_processing.decode_action(action, eval_env.action_space.nvec)
+            # print(f"action:{decoded_action}")
             obs_next, reward, terminated, truncated, info = eval_env.step(decoded_action)
+            # print(f"obs_next:{obs_next}")
+            # print(f"info:{info}")
+            # mean_ult = np.mean(obs_next[::-7])
             done = terminated or truncated
             agent.observe(obs_next, action, reward, done)
             ep_reward += reward
+            old_reward = info.get("old_rewards")
+            old_ep_reward += old_reward
             if render:
                 eval_env.render()
                 if done:
                     print(f"Episode terminated. Episode reward: {ep_reward}")
                 sleep(0.5)
         total_reward += ep_reward
+        total_old_reward += old_ep_reward
         total_steps += agent.context.timestep
         if info.get("is_success", False) or ep_reward > 0:
             num_successes += 1
@@ -262,6 +277,7 @@ def evaluate(
         num_successes / episodes,
         total_reward / episodes,
         total_steps / episodes,
+        total_old_reward / episodes,
     )
 
 
@@ -317,6 +333,7 @@ def train(
             agent.replay_buffer.flush()
             env = RNG.rng.choice(envs)
             agent.context_reset(env.reset(seed=args.seed)[0])
+            agent.context_reset(env.reset(seed=args.seed)[0])
         agent.train()
         eps.anneal()
 
@@ -336,13 +353,16 @@ def train(
             }
             # Perform an evaluation for each of the eval environments and add to our log
             for env_str, eval_env in zip(env_strs, eval_envs):
-                sr, ret, length = evaluate(agent, eval_env, eval_episodes, args=args)
+                sr, ret, length, old_ret = evaluate(agent, eval_env, eval_episodes, args=args)
 
+                new_ret = ret
+                ret = old_ret
                 log_vals.update(
                     {
                         f"{env_str}/SuccessRate": sr,
                         f"{env_str}/Return": ret,
                         f"{env_str}/EpisodeLength": length,
+                        f"{env_str}/New return": new_ret,
                     }
                 )
 
@@ -447,8 +467,8 @@ def run_experiment(args):
     eval_envs = []
     for env_str in args.envs:
         print(f'test:{env_str}')
-        envs.append(env_processing.make_env(env_str))
-        eval_envs.append(env_processing.make_env(env_str))
+        envs.append(env_processing.make_env(env_str,seed=args.seed))
+        eval_envs.append(env_processing.make_env(env_str,seed=args.seed))
     device = torch.device(args.device)
     set_global_seed(args.seed, *(envs + eval_envs))
 
@@ -499,6 +519,12 @@ def run_experiment(args):
 
     # Enjoy mode
     if args.render:
+        if args.policy_path:
+            policy_path = os.path.join(
+                policy_save_dir,
+                args.policy_path,
+            )
+            print(policy_path)
         agent.policy_network.load_state_dict(
             torch.load(policy_path, map_location="mps")
         )

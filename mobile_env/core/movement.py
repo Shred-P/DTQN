@@ -79,6 +79,6 @@ class RandomWaypointMovement(Movement):
             x = self.rng.uniform(0, self.width)
             y = self.rng.uniform(0, self.height)
             self.initial[ue] = (x, y)
-
+            # print(f"UE{ue.ue_id} init at:({x},{y}")
         x, y = self.initial[ue]
         return x, y

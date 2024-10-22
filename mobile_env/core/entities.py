@@ -51,7 +51,7 @@ class UserEquipment:
         self.y: float = None
         self.stime: int = None
         self.extime: int = None
-
+        # print(f"UE{self.ue_id} Initilized at :({self.x},{self.y})")
     @property
     def point(self):
         return Point(int(self.x), int(self.y))

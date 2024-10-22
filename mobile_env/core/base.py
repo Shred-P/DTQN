@@ -165,6 +165,7 @@ class MComCore(gymnasium.Env):
         """Return config with updated and rotated seeds."""
 
         seed = config["seed"]
+        # print(f"seed detected:{seed}")
         keys = [
             "arrival_params",
             "channel_params",
@@ -300,20 +301,39 @@ class MComCore(gymnasium.Env):
 
         # update macro (aggregated) data rates for each UE
         self.macro = self.macro_datarates(self.datarates)
-
+        # print(f"test:DR:{self.datarates.values()} and MACRO:{self.macro.values()}")
         # compute utilities from UEs' data rates & log its mean value
         self.utilities = {
             ue: self.utility.utility(self.macro[ue]) for ue in self.active
         }
-
+        # print(f"unsacaled u:{self.utilities.values()}")
         # scale utilities to range [-1, 1] before computing rewards
         self.utilities = {
             ue: self.utility.scale(util) for ue, util in self.utilities.items()
         }
+        # print(f"sacaled u:{self.utilities.values()}")
+
+        import copy
+        self.optimized_utilities = copy.deepcopy(self.utilities)
+
+        # todo 修改最小utility
+        for key, value in self.optimized_utilities.items():
+            if value < -0.3:
+                self.optimized_utilities[key] = -0.3
+        utilities = np.asarray([utility for utility in self.optimized_utilities.values()])
+        # assert that rewards are in range [-1, +1]
+        bounded = np.logical_and(utilities >= -1, utilities <= 1).all()
+        assert bounded, "Utilities must be in range [-1, +1]"
+
+        # return average utility of UEs to central agent as reward
+        optimized_rewards = np.mean(utilities)
+
 
         # compute rewards from utility for each UE
         # method is defined by handler according to strategy pattern
+
         rewards = self.handler.reward(self)
+
 
         # evaluate metrics and update tracked metrics given the core simulation
         self.monitor.update(self)
@@ -367,7 +387,11 @@ class MComCore(gymnasium.Env):
         terminated = False
         truncated = self.time_is_up
 
-        return observation, rewards, terminated, truncated, info
+        # return observation, rewards, terminated, truncated, info
+        # todo new rewards method
+        info['old_rewards'] = rewards
+        return observation, optimized_rewards, terminated, truncated, info
+
 
     @property
     def time_is_up(self):

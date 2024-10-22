@@ -27,11 +27,13 @@ from typing import Tuple
 from utils.random import RNG
 import mobile_env
 
-def make_env(id_or_path: str) -> GymEnvironment:
+
+def make_env(id_or_path: str, seed=0) -> GymEnvironment:
     """Makes a GV gym environment."""
     try:
         print("Loading using gym.make")
-        env = gym.make(id_or_path)
+        seed_config = {"seed": seed}
+        env = gym.make(id_or_path, config=seed_config, render_mode='human')
     except gym.error.Error:
         print(f"Environment with id {id_or_path} not found.")
         env_full_path = os.path.join(os.getcwd(), "envs", "gridverse", id_or_path)
