@@ -110,7 +110,7 @@ class CSVLogger:
 
 
 def get_logger(
-    policy_path: str, args: argparse.Namespace, wandb_kwargs: Dict[str, str]
+        policy_path: str, args: argparse.Namespace, wandb_kwargs: Dict[str, str]
 ):
     if args.disable_wandb:
         logger = CSVLogger(policy_path, args)
@@ -133,4 +133,17 @@ def get_logger(
             **wandb_kwargs,
         )
         logger = wandb
+    return logger
+
+
+def custom_get_logger(
+        project_name: str = 'mobile-env', wandb_kwargs: Dict[str, str]= None
+):
+    wandb.init(
+        project=project_name,
+        group='model=brain',
+        config={'config':"none"},
+        **wandb_kwargs,
+    )
+    logger = wandb
     return logger
