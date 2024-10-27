@@ -1,2 +1,0 @@
--r requirements-setup.txt
-flake8==6.0.0

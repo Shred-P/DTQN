@@ -1,2 +1,4 @@
-a  = ((0.998)^4)^3
-print()
+import torch
+
+x = torch.randn(3,4)
+print(x.max())

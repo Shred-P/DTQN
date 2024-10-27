@@ -117,7 +117,7 @@ def get_args():
     parser.add_argument(
         "--max-episode-steps",
         type=int,
-        default=-1,
+        default=200,
         help="The maximum number of steps allowed in the environment. If `env` has a `max_episode_steps`, this will "
              "be inferred. Otherwise, this argument must be supplied.",
     )
@@ -203,6 +203,25 @@ def get_args():
         type=str,
         help="The `$SLURM_JOB_ID` assigned to this job.",
     )
+    # mobile-env specific
+    parser.add_argument(
+        "--ue_num",
+        default=3,
+        type=int,
+        help="number of UserEquipment.",
+    )
+    parser.add_argument(
+        "--num-ues",
+        default=3,
+        type=int,
+        help="number of UserEquipment.",
+    )
+    parser.add_argument(
+        "--bs-dist",
+        default=100,
+        type=int,
+        help="distance of BS.",
+    )
 
     return parser.parse_args()
 
@@ -232,6 +251,7 @@ def evaluate(
 
     total_reward = 0
     total_old_reward = 0
+    total_unscaled_utility = 0
     num_successes = 0
     total_steps = 0
     # for _ in range (5):
@@ -241,7 +261,8 @@ def evaluate(
         agent.context_reset(eval_env.reset(seed=args.seed)[0])
         done = False
         ep_reward = 0
-        old_ep_reward = 0
+        # old_ep_reward = 0
+        ep_unscaled_utility = 0
         if render:
             eval_env.render()
             sleep(0.5)
@@ -252,19 +273,21 @@ def evaluate(
             obs_next, reward, terminated, truncated, info = eval_env.step(decoded_action)
             # print(f"obs_next:{obs_next}")
             # print(f"info:{info}")
-            # mean_ult = np.mean(obs_next[::-7])
+
             done = terminated or truncated
             agent.observe(obs_next, action, reward, done)
             ep_reward += reward
-            old_reward = info.get("old_rewards")
-            old_ep_reward += old_reward
+            ep_unscaled_utility = info.get("unscaled_mean_utilities", None)
+            # old_reward = info.get("old_rewards")
+            # old_ep_reward += old_reward
             if render:
                 eval_env.render()
                 if done:
                     print(f"Episode terminated. Episode reward: {ep_reward}")
                 sleep(0.5)
         total_reward += ep_reward
-        total_old_reward += old_ep_reward
+        total_unscaled_utility += ep_unscaled_utility
+        # total_old_reward += old_ep_reward
         total_steps += agent.context.timestep
         if info.get("is_success", False) or ep_reward > 0:
             num_successes += 1
@@ -277,7 +300,7 @@ def evaluate(
         num_successes / episodes,
         total_reward / episodes,
         total_steps / episodes,
-        total_old_reward / episodes,
+        total_unscaled_utility / episodes,
     )
 
 
@@ -353,16 +376,14 @@ def train(
             }
             # Perform an evaluation for each of the eval environments and add to our log
             for env_str, eval_env in zip(env_strs, eval_envs):
-                sr, ret, length, old_ret = evaluate(agent, eval_env, eval_episodes, args=args)
+                sr, ret, length, unscaled_utility = evaluate(agent, eval_env, eval_episodes, args=args)
 
-                new_ret = ret
-                ret = old_ret
                 log_vals.update(
                     {
                         f"{env_str}/SuccessRate": sr,
                         f"{env_str}/Return": ret,
-                        f"{env_str}/EpisodeLength": length,
-                        f"{env_str}/New return": new_ret,
+                        # f"{env_str}/EpisodeLength": length,
+                        f"{env_str}/UnscaledUtility": unscaled_utility,
                     }
                 )
 
@@ -442,9 +463,9 @@ def prepopulate(agent, prepop_steps: int, envs: Tuple[Env]) -> None:
         agent.context_reset(env.reset()[0])
         done = False
         while not done:
-            num_actions = env_processing.total_dimensions(env.action_space.nvec )
+            num_actions = env_processing.total_dimensions(env.action_space.nvec)
             action = RNG.rng.integers(num_actions)
-            decode_action = env_processing.decode_action(action,env.action_space.nvec )
+            decode_action = env_processing.decode_action(action, env.action_space.nvec)
             next_obs, reward, terminated, truncated, info = env.step(decode_action)
 
             if truncated:
@@ -465,10 +486,14 @@ def run_experiment(args):
     # Create envs, set seed, create RL agent
     envs = []
     eval_envs = []
+    env_config = {
+        "seed": args.seed,
+        'bs_dist': args.bs_dist,
+        'num_ues': args.num_ues,
+    }
     for env_str in args.envs:
-        print(f'test:{env_str}')
-        envs.append(env_processing.make_env(env_str,seed=args.seed))
-        eval_envs.append(env_processing.make_env(env_str,seed=args.seed))
+        envs.append(env_processing.make_env(env_str, env_config=env_config))
+        eval_envs.append(env_processing.make_env(env_str, env_config=env_config))
     device = torch.device(args.device)
     set_global_seed(args.seed, *(envs + eval_envs))
 

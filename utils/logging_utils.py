@@ -85,7 +85,7 @@ class CSVLogger:
         for env in self.envs:
             results_row += [
                 results[f"{env}/SuccessRate"],
-                results[f"{env}/EpisodeLength"],
+                # results[f"{env}/EpisodeLength"],
                 results[f"{env}/Return"],
             ]
         with open(self.results_path, "a") as file:
@@ -137,12 +137,13 @@ def get_logger(
 
 
 def custom_get_logger(
-        project_name: str = 'mobile-env', wandb_kwargs: Dict[str, str]= None
+        project_name: str = 'mobile-env', seed=-1, wandb_kwargs: Dict[str, str] = None
 ):
     wandb.init(
         project=project_name,
         group='model=brain',
-        config={'config':"none"},
+        config={'config': "none",
+                'seed': seed},
         **wandb_kwargs,
     )
     logger = wandb

@@ -3,23 +3,23 @@ from gym import spaces
 from gym.wrappers.time_limit import TimeLimit
 import numpy as np
 from typing import Union
-
-try:
-    from gym_gridverse.gym import GymEnvironment
-    from gym_gridverse.envs.yaml.factory import factory_env_from_yaml
-    from gym_gridverse.outer_env import OuterEnv
-    from gym_gridverse.representations.observation_representations import (
-        make_observation_representation,
-    )
-    from gym_gridverse.representations.state_representations import (
-        make_state_representation,
-    )
-except ImportError:
-    print(
-        f"WARNING: ``gym_gridverse`` is not installed. This means you cannot run an experiment with the `gv_*` domains."
-    )
-    GymEnvironment = None
-from envs.gv_wrapper import GridVerseWrapper
+#
+# try:
+#     from gym_gridverse.gym import GymEnvironment
+#     from gym_gridverse.envs.yaml.factory import factory_env_from_yaml
+#     from gym_gridverse.outer_env import OuterEnv
+#     from gym_gridverse.representations.observation_representations import (
+#         make_observation_representation,
+#     )
+#     from gym_gridverse.representations.state_representations import (
+#         make_state_representation,
+#     )
+# except ImportError:
+#     print(
+#         f"WARNING: ``gym_gridverse`` is not installed.  the `gv_*` "
+#     )
+#     GymEnvironment = None
+# from envs.gv_wrapper import GridVerseWrapper
 import os
 from enum import Enum
 from typing import Tuple
@@ -28,32 +28,13 @@ from utils.random import RNG
 import mobile_env
 
 
-def make_env(id_or_path: str, seed=0) -> GymEnvironment:
+def make_env(id_or_path: str, env_config={}) -> gym.Env:
     """Makes a GV gym environment."""
     try:
         print("Loading using gym.make")
-        seed_config = {"seed": seed}
-        env = gym.make(id_or_path, config=seed_config, render_mode='human')
+        env = gym.make(id_or_path, config=env_config, render_mode='human')
     except gym.error.Error:
         print(f"Environment with id {id_or_path} not found.")
-        env_full_path = os.path.join(os.getcwd(), "envs", "gridverse", id_or_path)
-        print(f"Loading using YAML:{env_full_path}")
-        inner_env = factory_env_from_yaml(
-            env_full_path
-        )
-        state_representation = make_state_representation(
-            "default", inner_env.state_space
-        )
-        observation_representation = make_observation_representation(
-            "default", inner_env.observation_space
-        )
-        outer_env = OuterEnv(
-            inner_env,
-            state_representation=state_representation,
-            observation_representation=observation_representation,
-        )
-        env = GymEnvironment(outer_env)
-        env = TimeLimit(GridVerseWrapper(env), max_episode_steps=250)
     return env
 
 

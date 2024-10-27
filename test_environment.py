@@ -56,8 +56,9 @@ if __name__ == "__main__":
     arg = {'model': 'human brain',
            'disable_wandb': False, }
     env_str = "mobile-small-central-v0"
-    logger = custom_get_logger(project_name='mobile-env', wandb_kwargs=wandb_kwargs)
-    seed_config = {"seed": 3407}
+
+    seed_config = {"seed": 9}
+    logger = custom_get_logger(project_name='mobile-env', seed=seed_config.get('seed'), wandb_kwargs=wandb_kwargs)
     # 创建环境
     env = gym.make(env_str, config=seed_config, render_mode="human")
 

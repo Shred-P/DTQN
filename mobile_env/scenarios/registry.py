@@ -8,8 +8,9 @@ from mobile_env.scenarios.large import MComLarge
 from mobile_env.scenarios.medium import MComMedium
 from mobile_env.scenarios.small import MComSmall
 from mobile_env.scenarios.custom import MComCustom
+from mobile_env.scenarios.article import MComArticle
 
-scenarios = {"small": MComSmall, "medium": MComMedium, "large": MComLarge, "custom": MComCustom}
+scenarios = {"small": MComSmall, "medium": MComMedium, "large": MComLarge, "custom": MComCustom,"article":MComArticle}
 handlers = {"ma": MComMAHandler, "central": MComCentralHandler}
 
 for scenario, handler in itertools.product(scenarios, handlers):

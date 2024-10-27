@@ -306,6 +306,7 @@ class MComCore(gymnasium.Env):
         self.utilities = {
             ue: self.utility.utility(self.macro[ue]) for ue in self.active
         }
+        self.unscaled_mean_utility = np.mean(np.asarray([utility for utility in self.utilities.values()]))
         # print(f"unsacaled u:{self.utilities.values()}")
         # scale utilities to range [-1, 1] before computing rewards
         self.utilities = {
@@ -313,21 +314,22 @@ class MComCore(gymnasium.Env):
         }
         # print(f"sacaled u:{self.utilities.values()}")
 
-        import copy
-        self.optimized_utilities = copy.deepcopy(self.utilities)
+
 
         # todo 修改最小utility
-        for key, value in self.optimized_utilities.items():
-            if value < -0.3:
-                self.optimized_utilities[key] = -0.3
-        utilities = np.asarray([utility for utility in self.optimized_utilities.values()])
-        # assert that rewards are in range [-1, +1]
-        bounded = np.logical_and(utilities >= -1, utilities <= 1).all()
-        assert bounded, "Utilities must be in range [-1, +1]"
+        # import copy
+        # self.optimized_utilities = copy.deepcopy(self.utilities)
+        # for key, value in self.optimized_utilities.items():
+        #     if value < -0.3:
+        #         self.optimized_utilities[key] = -0.3
+        # utilities = np.asarray([utility for utility in self.optimized_utilities.values()])
+        # # assert that rewards are in range [-1, +1]
+        # bounded = np.logical_and(utilities >= -1, utilities <= 1).all()
+        # assert bounded, "Utilities must be in range [-1, +1]"
 
         # return average utility of UEs to central agent as reward
-        optimized_rewards = np.mean(utilities)
-
+        # optimized_rewards = np.mean(utilities)
+        #todo end
 
         # compute rewards from utility for each UE
         # method is defined by handler according to strategy pattern
@@ -337,6 +339,12 @@ class MComCore(gymnasium.Env):
 
         # evaluate metrics and update tracked metrics given the core simulation
         self.monitor.update(self)
+
+        # render_utility = self.monitor.scalar_results.get('mean utility')[-1]
+        # if not render_utility==rewards:
+        #     print(f"test graph and reward is equal?{render_utility==rewards}. handle:{rewards} || monitor:{render_utility}")
+        # else:
+        #     print(f"reward:{rewards}")
 
         # move user equipments around; update positions of UEs
         for ue in self.active:
@@ -390,7 +398,10 @@ class MComCore(gymnasium.Env):
         # return observation, rewards, terminated, truncated, info
         # todo new rewards method
         info['old_rewards'] = rewards
-        return observation, optimized_rewards, terminated, truncated, info
+        info['unscaled_mean_utilities'] = self.unscaled_mean_utility
+        """暂时采用reward训练"""
+        return observation, rewards, terminated, truncated, info
+        # return observation, optimized_rewards, terminated, truncated, info
 
 
     @property

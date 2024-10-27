@@ -1,2 +1,0 @@
--r requirements-setup.txt
-isort==5.12.0
